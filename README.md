@@ -36,22 +36,27 @@ sudo systemctl enable --now pcscd.socket
 
 The package depends on `libpcsclite1` and recommends `pcscd`.
 
-### Arch Linux (AUR)
+### Arch Linux
+
+The AUR packages `jex` and `jex-bin` are not published yet. Until then build from the PKGBUILDs in this repository:
 
 ```bash
-yay -S jex        # build from source
-yay -S jex-bin    # prebuilt release binary
+git clone https://github.com/jex-crypto/jex && cd jex/packaging/arch
+makepkg -si                       # build from source
+(cd jex-bin && makepkg -si)       # or: prebuilt release binary
 sudo pacman -S ccid && sudo systemctl enable --now pcscd.socket
 ```
 
 ### FreeBSD
 
+The port is maintained in this repository under `packaging/freebsd` until it is accepted into the ports tree:
+
 ```bash
+git clone https://github.com/jex-crypto/jex
+cp -R jex/packaging/freebsd/security/jex /usr/ports/security/jex
 cd /usr/ports/security/jex && make install clean
 sysrc pcscd_enable=YES && service pcscd start
-```
-
-The port is maintained in this repository under `packaging/freebsd` until it is accepted into the ports tree. The `GUI` port option (on by default) controls the graphical PIN dialog of the browser host.
+``` The `GUI` port option (on by default) controls the graphical PIN dialog of the browser host.
 
 ### Prebuilt tarball
 
