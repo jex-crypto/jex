@@ -2023,3 +2023,52 @@ pub fn inspect_presence(input: &[u8]) -> Result<XLongPresence> {
     }
     Ok(p)
 }
+
+#[cfg(test)]
+mod real_evidence_tests {
+    use super::*;
+
+    /// Run against a real XLT1/A signature (not shipped: contains personal data):
+    /// JEX_XLT1_SAMPLE=path cargo test real_embedded_evidence -- --ignored
+    #[test]
+    #[ignore]
+    fn real_embedded_evidence_signatures_verify() {
+        let Ok(path) = std::env::var("JEX_XLT1_SAMPLE") else {
+            return;
+        };
+        let raw = std::fs::read(path).unwrap();
+        let (_, _, _, sif) = cms_single_signer_mut(&raw).unwrap();
+        let attrs = existing_unsigned_attrs(&sif).unwrap();
+        let mut pool =
+            parse_certificate_values(&find_attr(&attrs, OID_CERT_VALUES).unwrap().unwrap())
+                .unwrap();
+        pool.push(cades::parse(&raw).unwrap().certificate);
+        let (crls, ocsps) =
+            parse_revocation_values(&find_attr(&attrs, OID_REVOCATION_VALUES).unwrap().unwrap())
+                .unwrap();
+        for (i, basic) in ocsps.iter().enumerate() {
+            let embedded = ocsp::embedded_certificates(basic).unwrap();
+            let produced = {
+                let t = der::parse_tlv(basic).unwrap();
+                let bf = x509::raw_children(t.value).unwrap();
+                let rd = der::parse_tlv(bf[0]).unwrap();
+                let rf = x509::raw_children(rd.value).unwrap();
+                let pos = if rf[0][0] == 0xA0 { 2 } else { 1 };
+                let g = der::parse_tlv(rf[pos]).unwrap();
+                String::from_utf8(g.value.to_vec()).unwrap()
+            };
+            let ok = pool.iter().any(|issuer| {
+                ocsp::verify_response_signature(basic, &embedded, issuer, &produced).is_ok()
+            });
+            eprintln!("OCSP #{i}: embedded certs={} authentic={ok}", embedded.len());
+            assert!(ok, "OCSP #{i} not authenticated");
+        }
+        for (i, crl) in crls.iter().enumerate() {
+            let ok = pool
+                .iter()
+                .any(|c| x509::verify_signed_structure(crl, c).unwrap_or(false));
+            eprintln!("CRL #{i}: authentic={ok}");
+            assert!(ok, "CRL #{i} not authenticated");
+        }
+    }
+}

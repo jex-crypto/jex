@@ -8,6 +8,13 @@ use std::{io::Read, time::Duration};
 
 pub const OID_SHA1: &str = "1.3.14.3.2.26";
 pub const OID_BASIC_OCSP_RESPONSE: &str = "1.3.6.1.5.5.7.48.1.1";
+const OID_KP_OCSP_SIGNING: &str = "1.3.6.1.5.5.7.3.9";
+
+/// Allowed clock skew for a live response's thisUpdate in the future.
+const MAX_FUTURE_SKEW_SECS: i64 = 10 * 60;
+/// A live response without nextUpdate claims to be real-time; reject one
+/// older than this as a probable replay.
+const MAX_AGE_WITHOUT_NEXT_UPDATE_SECS: i64 = 60 * 60;
 
 #[derive(Debug, Clone)]
 pub struct OcspEvidence {
@@ -195,7 +202,7 @@ fn parse_response_bytes(input: &[u8]) -> Result<ParsedOcspWire> {
     })
 }
 
-fn embedded_certificates(basic_der: &[u8]) -> Result<Vec<Vec<u8>>> {
+pub(crate) fn embedded_certificates(basic_der: &[u8]) -> Result<Vec<Vec<u8>>> {
     let basic = der::parse_tlv(basic_der)?;
     if basic.tag != 0x30 || basic.total_len != basic_der.len() {
         bail!("BasicOCSPResponse is malformed");
@@ -405,6 +412,77 @@ fn parse_revoked_reason(revoked_info: &[u8]) -> Option<String> {
     Some(crl_reason_label(code).to_string())
 }
 
+/// RFC 6960 §4.2.2.2: a response is acceptable only if it is signed by the
+/// CA that issued the certificate in question, or by a delegated responder
+/// certificate issued directly by that CA, carrying id-kp-OCSPSigning and
+/// valid at producedAt.
+pub(crate) fn verify_response_signature(
+    basic_der: &[u8],
+    embedded_certificates: &[Vec<u8>],
+    issuer_der: &[u8],
+    produced_at: &str,
+) -> Result<()> {
+    if x509::verify_signed_structure(basic_der, issuer_der).unwrap_or(false) {
+        return Ok(());
+    }
+    let produced_at_unix = x509::generalized_time_to_unix(produced_at)?;
+    for responder in embedded_certificates {
+        let authorized = x509::verify_issued_by(responder, issuer_der).unwrap_or(false)
+            && x509::has_extended_key_usage(responder, OID_KP_OCSP_SIGNING).unwrap_or(false)
+            && x509::validity(responder)
+                .map(|v| v.is_valid_at(produced_at_unix))
+                .unwrap_or(false);
+        if authorized && x509::verify_signed_structure(basic_der, responder).unwrap_or(false) {
+            return Ok(());
+        }
+    }
+    bail!(
+        "OCSP response signature does not verify against the issuing CA or an authorized responder certificate"
+    )
+}
+
+/// Freshness for a response obtained just now from a responder.
+fn check_live_freshness(this_update_unix: i64, next_update: Option<&str>, now: i64) -> Result<()> {
+    if this_update_unix > now + MAX_FUTURE_SKEW_SECS {
+        bail!("OCSP thisUpdate is more than {MAX_FUTURE_SKEW_SECS}s in the future");
+    }
+    match next_update {
+        Some(nu) => {
+            if x509::generalized_time_to_unix(nu)? < now {
+                bail!("OCSP response expired: nextUpdate={nu}");
+            }
+        }
+        None => {
+            if this_update_unix < now - MAX_AGE_WITHOUT_NEXT_UPDATE_SECS {
+                bail!(
+                    "OCSP response without nextUpdate is older than {MAX_AGE_WITHOUT_NEXT_UPDATE_SECS}s; possible replay"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Parse a response obtained from a responder or a file and check that it
+/// is authentic before it is trusted or embedded.
+fn parse_authentic(input: &[u8], cert_der: &[u8], issuer_der: &[u8]) -> Result<OcspEvidence> {
+    let e = parse_for_certificate(input, cert_der, issuer_der)?;
+    verify_response_signature(
+        &e.basic_response,
+        &e.embedded_certificates,
+        issuer_der,
+        &e.produced_at,
+    )?;
+    Ok(e)
+}
+
 pub fn parse_for_certificate(
     input: &[u8],
     cert_der: &[u8],
@@ -484,9 +562,11 @@ pub fn fetch(
     let request = build_request(cert_der, issuer_der)?;
     let mut errors = Vec::new();
     for url in urls {
-        match http_post_ocsp(&url, &request, timeout_secs)
-            .and_then(|r| parse_for_certificate(&r, cert_der, issuer_der))
-        {
+        match http_post_ocsp(&url, &request, timeout_secs).and_then(|r| {
+            let e = parse_authentic(&r, cert_der, issuer_der)?;
+            check_live_freshness(e.this_update_unix, e.next_update.as_deref(), unix_now())?;
+            Ok(e)
+        }) {
             Ok(v) => return Ok(v),
             Err(e) => errors.push(format!("{url}: {e:#}")),
         }
@@ -517,9 +597,17 @@ pub fn check_status(
     let request = build_request(cert_der, issuer_der)?;
     let mut errors = Vec::new();
     for url in urls {
-        match http_post_ocsp(&url, &request, timeout_secs)
-            .and_then(|r| status_outcome_for_certificate(&r, cert_der, issuer_der))
-        {
+        match http_post_ocsp(&url, &request, timeout_secs).and_then(|r| {
+            let m = locate_single_response(&r, cert_der, issuer_der)?;
+            verify_response_signature(
+                &m.basic_der,
+                &m.embedded_certificates,
+                issuer_der,
+                &m.produced_at,
+            )?;
+            check_live_freshness(m.this_update_unix, m.next_update.as_deref(), unix_now())?;
+            status_outcome_for_certificate(&r, cert_der, issuer_der)
+        }) {
             Ok(v) => return Ok(v),
             Err(e) => errors.push(format!("{url}: {e:#}")),
         }
@@ -533,7 +621,7 @@ pub fn check_status(
 pub fn load(path: &std::path::Path, cert_der: &[u8], issuer_der: &[u8]) -> Result<OcspEvidence> {
     let raw =
         std::fs::read(path).with_context(|| format!("read OCSP response {}", path.display()))?;
-    parse_for_certificate(&raw, cert_der, issuer_der)
+    parse_authentic(&raw, cert_der, issuer_der)
 }
 
 #[cfg(test)]
@@ -551,6 +639,19 @@ mod tests {
         let mut out = generalized_time_tlv("20240101000000Z");
         out.extend_from_slice(&[0xA0, 0x03, 0x0A, 0x01, reason_code]);
         out
+    }
+
+    #[test]
+    fn live_freshness_rules() {
+        let now = 1_800_000_000;
+        // Real-time responder (no nextUpdate): fresh, slightly ahead, replayed.
+        assert!(check_live_freshness(now - 5, None, now).is_ok());
+        assert!(check_live_freshness(now + 60, None, now).is_ok());
+        assert!(check_live_freshness(now + 3600, None, now).is_err());
+        assert!(check_live_freshness(now - 2 * 3600, None, now).is_err());
+        // Pre-signed responses are fine until nextUpdate.
+        assert!(check_live_freshness(now - 86_400, Some("20290101000000Z"), now).is_ok());
+        assert!(check_live_freshness(now - 86_400, Some("20200101000000Z"), now).is_err());
     }
 
     #[test]

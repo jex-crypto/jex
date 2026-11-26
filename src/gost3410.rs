@@ -34,19 +34,26 @@ pub fn sign_digest(curve: &Curve, private_le: &[u8], digest: &[u8]) -> Result<Ve
     let mut nonces = NonceGen::new(&curve.q, &d, &e, extra.as_ref());
     loop {
         let k = nonces.next();
-        let c = curves::scalar_mul_generator(curve, &k)?;
-        let r = &c.x % &curve.q;
-        if r.is_zero() {
-            continue;
+        if let Some(sig) = sign_with_k(curve, &d, &e, &k)? {
+            return Ok(sig);
         }
-        let s = ((&r * &d) + (&k * &e)) % &curve.q;
-        if s.is_zero() {
-            continue;
-        }
-        let mut out = be_fixed(&s, curve.bytes);
-        out.extend_from_slice(&be_fixed(&r, curve.bytes));
-        return Ok(out);
     }
+}
+
+/// One signing attempt with a given nonce; `None` when r or s is zero.
+fn sign_with_k(curve: &Curve, d: &BigUint, e: &BigUint, k: &BigUint) -> Result<Option<Vec<u8>>> {
+    let c = curves::scalar_mul_generator(curve, k)?;
+    let r = &c.x % &curve.q;
+    if r.is_zero() {
+        return Ok(None);
+    }
+    let s = ((&r * d) + (k * e)) % &curve.q;
+    if s.is_zero() {
+        return Ok(None);
+    }
+    let mut out = be_fixed(&s, curve.bytes);
+    out.extend_from_slice(&be_fixed(&r, curve.bytes));
+    Ok(Some(out))
 }
 
 pub fn verify_digest(
@@ -226,6 +233,53 @@ mod tests {
             "a59bab22ecae19c65fbde6e5f4e9f5d8549d31f037f9df9b905500e171923a77\
              3d5f1530f2ed7e964cb2eedc29e9ad2f3afe93b2814f79f5000ffc0366c251e6"
         );
+    }
+
+    fn n(x: &str) -> BigUint {
+        BigUint::parse_bytes(x.as_bytes(), 16).unwrap()
+    }
+
+    /// GOST R 34.10-2012, Appendix A.1 (256-bit test curve, fixed k).
+    #[test]
+    fn gost_r_34_10_2012_appendix_a1() {
+        let curve = Curve {
+            oid: "test",
+            name: "GOST R 34.10-2012 A.1 test curve",
+            bytes: 32,
+            p: n("8000000000000000000000000000000000000000000000000000000000000431"),
+            q: n("8000000000000000000000000000000150FE8A1892976154C59CFC193ACCF5B3"),
+            a: n("7"),
+            b: n("5FBFF498AA938CE739B8E022FBAFEF40563F6E6A3472FC2A514C0CE9DAE23B7E"),
+            gx: n("2"),
+            gy: n("08E2A8A0E65147D4BD6316030E16D19C85C97F0A9CA267122B96ABBCEA7E8FC8"),
+        };
+        let d = n("7A929ADE789BB9BE10ED359DD39A72C11B60961F49397EEE1D19CE9891EC3B28");
+        let e = n("2DFBC1B372D89A1188C09C52E0EEC61FCE52032AB1022E8E67ECE6672B043EE5");
+        let k = n("77105C9B20BCD3122823C8CF6FCC7B956DE33814E95B7FE64FED924594DCEAB3");
+        let r = "41aa28d2f1ab148280cd9ed56feda41974053554a42767b83ad043fd39dc0493";
+        let s = "01456c64ba4642a1653c235a98a60249bcd6d3f746b631df928014f6c5bf9c40";
+
+        let q = curves::public_key(&curve, &d).unwrap();
+        assert_eq!(
+            q.x,
+            n("7F2B49E270DB6D90D8595BEC458B50C58585BA1D4E9B788F6689DBD8E56FD80B")
+        );
+        assert_eq!(
+            q.y,
+            n("26F1B489D6701DD185C8413A977B3CBBAF64D1C593D26627DFFB101A87FF77DA")
+        );
+
+        let sig = sign_with_k(&curve, &d, &e, &k).unwrap().unwrap();
+        assert_eq!(hex::encode(&sig), format!("{s}{r}"));
+
+        // The digest is read as a little-endian integer (CryptoPro convention).
+        let digest = curves::le_fixed(&e, 32);
+        let x = curves::le_fixed(&q.x, 32);
+        let y = curves::le_fixed(&q.y, 32);
+        assert!(verify_digest(&curve, &x, &y, &digest, &sig).unwrap());
+        let mut bad = sig.clone();
+        bad[63] ^= 1;
+        assert!(!verify_digest(&curve, &x, &y, &digest, &bad).unwrap());
     }
 
     fn curves_under_test() -> Vec<Curve> {

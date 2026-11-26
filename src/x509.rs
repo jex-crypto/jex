@@ -1033,20 +1033,52 @@ pub fn verify_issued_by(cert_der: &[u8], issuer_cert_der: &[u8]) -> Result<bool>
     if cert_names.issuer_der != issuer_names.subject_der {
         bail!("issuer certificate subject does not match certificate issuer");
     }
-    let (tbs_der, sig_alg_raw, sig_raw) = certificate_parts(cert_der)?;
-    let sig_alg_oid = algorithm_oid(sig_alg_raw)?;
-    let digest = digest_for_cert_signature(&sig_alg_oid, tbs_der)?;
-    let signature = signature_value(sig_raw)?;
-    let issuer = identity(issuer_cert_der)?;
-    let curve =
-        curves::by_oid(&issuer.curve_oid).context("unsupported issuer certificate curve")?;
+    certificate_parts(cert_der)?;
+    verify_signed_structure(cert_der, issuer_cert_der)
+}
+
+/// Verify the GOST signature on a `SEQUENCE { tbs, AlgorithmIdentifier,
+/// BIT STRING, ... }` (Certificate, CertificateList, BasicOCSPResponse) with
+/// the public key of `signer_cert_der`. The tbs bytes are hashed as received.
+pub fn verify_signed_structure(signed_der: &[u8], signer_cert_der: &[u8]) -> Result<bool> {
+    let top = der::parse_tlv(signed_der).context("parse signed structure")?;
+    if top.tag != 0x30 || top.total_len != signed_der.len() {
+        bail!("signed structure is not one complete DER SEQUENCE");
+    }
+    let parts = raw_children(top.value)?;
+    if parts.len() < 3 {
+        bail!("signed structure is truncated");
+    }
+    let sig_alg_oid = algorithm_oid(parts[1])?;
+    let digest = digest_for_cert_signature(&sig_alg_oid, parts[0])?;
+    let signature = signature_value(parts[2])?;
+    let signer = identity(signer_cert_der)?;
+    let curve = curves::by_oid(&signer.curve_oid).context("unsupported signer certificate curve")?;
     gost3410::verify_digest(
         &curve,
-        &issuer.public_x_le,
-        &issuer.public_y_le,
+        &signer.public_x_le,
+        &signer.public_y_le,
         &digest,
         &signature,
     )
+}
+
+/// True if the certificate's extendedKeyUsage lists `wanted_oid`.
+pub fn has_extended_key_usage(cert_der: &[u8], wanted_oid: &str) -> Result<bool> {
+    const OID_EKU: &str = "2.5.29.37";
+    let Some(value) = extension_value(cert_der, OID_EKU)? else {
+        return Ok(false);
+    };
+    let seq = der::parse_tlv(value).context("parse ExtKeyUsageSyntax")?;
+    if seq.tag != 0x30 {
+        bail!("ExtKeyUsageSyntax is not a SEQUENCE");
+    }
+    for oid in der::children(seq.value)? {
+        if oid.tag == 0x06 && der::decode_oid(oid.value).as_deref() == Some(wanted_oid) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Exact DER BIT STRING payload of SubjectPublicKeyInfo.subjectPublicKey,

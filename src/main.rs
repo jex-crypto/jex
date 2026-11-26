@@ -2339,6 +2339,10 @@ fn main() -> Result<()> {
                     } else {
                         println!("chain: {} CA certificate(s)", pki.chain_depth);
                     }
+                    println!(
+                        "root: {} (not checked against a trusted root list)",
+                        pki.root_cn.as_deref().unwrap_or("?")
+                    );
 
                     if verbose {
                         print_local_verification(&report);

@@ -204,6 +204,13 @@ pub fn validate_ca_crl_order(ca_chain: &[Vec<u8>], crls: &[Vec<u8>]) -> Result<(
         if crl_issuer != cert_names.issuer_der {
             bail!("CA CRL #{i} issuer does not match CA certificate #{i} issuer");
         }
+        // The CRL covering CA #i is issued by CA #i+1.
+        let crl_signer = &ca_chain[i + 1];
+        if !x509::verify_signed_structure(crl, crl_signer)
+            .with_context(|| format!("verify CA CRL #{i} signature"))?
+        {
+            bail!("CA CRL #{i} signature does not verify against its issuing CA certificate");
+        }
     }
     Ok(())
 }
@@ -373,6 +380,9 @@ pub fn check_certificate(
 pub struct PkiVerification {
     pub cert_check: x509::CertCheck,
     pub chain_depth: usize,
+    /// Subject CN of the self-issued certificate the chain ends at. It is
+    /// NOT compared against any list of trusted roots.
+    pub root_cn: Option<String>,
 }
 
 impl PkiVerification {
@@ -484,9 +494,11 @@ pub fn verify_signer_pki(
     verify_ca_chain(signer, &ca_chain)?;
     let cert_check = check_certificate(signer, None, timeout_secs, cache, allow_network, now)?;
 
+    let root = ca_chain.last().map(|c| c.as_slice()).unwrap_or(signer);
     Ok(PkiVerification {
         cert_check,
         chain_depth: ca_chain.len(),
+        root_cn: x509::extract_subject_cn(root).ok().flatten(),
     })
 }
 
