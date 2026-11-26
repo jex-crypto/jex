@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.2
+
+- Security: OCSP responses are now authenticated before they are trusted for revocation status or embedded into CAdES-X Long Type 1. A response must be signed by the issuing CA or by a delegated responder certificate issued by that CA with `id-kp-OCSPSigning` and valid at `producedAt` (RFC 6960 §4.2.2.2). Previously a forged "good" response over plain HTTP was accepted.
+- Live OCSP responses are checked for freshness: `thisUpdate` at most 10 minutes ahead, and either `nextUpdate` not passed or, without `nextUpdate`, `thisUpdate` within the last hour.
+- CA CRLs collected for XLT1 must verify against the next CA in the chain.
+- `cades verify` prints the chain root and states that it is not checked against a trusted root list.
+
 ## 0.13.1
 
 - GOST R 34.10-2012 signing now derives the per-signature nonce `k` with RFC 6979 HMAC_DRBG over HMAC-Streebog-512 (RFC 7836), seeded with the private key, the digest and fresh OS entropy. A weak or repeating system RNG can no longer leak the private key through a reused `k`.

@@ -2,7 +2,7 @@
 
 pkgname=jex-bin
 _pkgname=jex
-pkgver=0.13.1
+pkgver=0.13.2
 pkgrel=1
 pkgdesc='CryptoPro container reader and GOST CAdES/XAdES signing tool for Rutoken (prebuilt)'
 arch=('x86_64' 'aarch64')
