@@ -2,7 +2,7 @@ class Jex < Formula
   desc "CryptoPro container reader and GOST CAdES/XAdES signing tool for Rutoken"
   homepage "https://github.com/jex-crypto/jex"
   url "https://github.com/jex-crypto/jex/archive/refs/tags/v0.13.2.tar.gz"
-  sha256 "49f142ddc98117fc818fd9c4e3c0161a1e42655d94f3d3a4f6ba1b594e0ccebc"
+  sha256 "5567de9a3458e22ea1cb32f8bae041164649619d999008d6a54bfaf27124fa2b"
   license "AGPL-3.0-or-later"
   head "https://github.com/jex-crypto/jex.git", branch: "main"
 
