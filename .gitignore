@@ -1,0 +1,25 @@
+/target/
+.DS_Store
+*.pin
+extension/chrome/key.pem
+*.pin
+extension/keys/
+xcuserdata/
+*.xcuserstate
+daemon.token
+roman/
+tags
+scripts/__pycache__/
+README.md.*.sig
+
+# Local-only: build symlink, signatures made with real keys
+/jex
+*.sig
+
+# Golden vectors signed with a real qualified certificate (contain personal data)
+testdata/xmldsig/nmcades_*.xml
+testdata/xmldsig/nmcades_*.meta.json
+testdata/xmldsig/jex_enveloped_roman.xml
+testdata/xmldsig/jex_xades_t.xml
+testdata/xmldsig/jex_xades_xlt1.xml
+testdata/xmldsig/jex_xades_a.xml

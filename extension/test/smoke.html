@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Jex plugin smoke</title>
+  <script src="https://www.cryptopro.ru/sites/default/files/products/cades/cadesplugin_api.js"></script>
+</head>
+<body>
+  <h1>Jex / cadesplugin smoke</h1>
+  <pre id="out">loading…</pre>
+  <script>
+    const out = document.getElementById("out");
+    function log(s) { out.textContent += "\n" + s; }
+    out.textContent = "waiting cadesplugin…";
+    cadesplugin.then(async function () {
+      log("cadesplugin OK");
+      const about = await cadesplugin.CreateObjectAsync("CAdESCOM.About");
+      log("PluginVersion=" + (await about.PluginVersion));
+      const store = await cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+      await store.Open(2, "My");
+      const certs = await store.Certificates;
+      log("certs=" + (await certs.Count));
+    }, function (e) {
+      log("FAIL: " + e);
+    });
+    setTimeout(function () {
+      if (out.textContent.indexOf("OK") === -1 && out.textContent.indexOf("FAIL") === -1)
+        log("(still waiting — check extension Reload + console)");
+    }, 8000);
+  </script>
+</body>
+</html>

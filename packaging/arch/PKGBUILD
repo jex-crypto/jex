@@ -1,0 +1,48 @@
+# Maintainer: Roman Yerin <r.yerin@640kb.co.uk>
+
+pkgname=jex
+pkgver=0.13.0
+pkgrel=1
+pkgdesc='CryptoPro container reader and GOST CAdES/XAdES signing tool for Rutoken'
+arch=('x86_64' 'aarch64')
+url='https://github.com/jex-crypto/jex'
+license=('AGPL-3.0-or-later')
+depends=('pcsclite' 'gcc-libs' 'glibc')
+makedepends=('cargo' 'pkgconf')
+optdepends=(
+  'ccid: USB CCID driver for Rutoken and other smart card readers'
+  'libglvnd: OpenGL for the graphical PIN dialog of the browser host'
+  'libxkbcommon-x11: keyboard input for the graphical PIN dialog on X11'
+  'wayland: graphical PIN dialog on Wayland'
+)
+options=('!lto')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP') # REPLACE with the real checksum: updpkgsums
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  # This test requests a timestamp from a public TSA and needs network access.
+  cargo test --frozen -- --skip enveloped_xades_t_synthetic_with_cryptopro_tsa
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 target/release/jex -t "$pkgdir/usr/bin"
+  install -Dm644 README.md -t "$pkgdir/usr/share/doc/$pkgname"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}

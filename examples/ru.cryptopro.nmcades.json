@@ -1,0 +1,11 @@
+{
+  "name": "ru.cryptopro.nmcades",
+  "description": "Jex Native Messaging Host (drop-in sketch for CryptoPro nmcades)",
+  "path": "/path/to/jex-nmcades-host.sh",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://iifchhfnnmpdbibifmljnfjhpififfog/",
+    "chrome-extension://epebfcehmdedogndhlcacafjaacknbcm/",
+    "chrome-extension://pfhgbfnnjiafkhfdkmpiflachepdcjod/"
+  ]
+}

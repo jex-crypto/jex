@@ -1,0 +1,10 @@
+Jex reads CryptoPro classic key containers from Rutoken Lite smart cards
+over PC/SC (or from containers saved on disk), unlocks GOST R 34.10-2012
+private keys and creates and verifies CMS/CAdES signatures (BES, T,
+X Long Type 1 and A with renewal) as well as XML-DSig/XAdES signatures,
+interoperable with CryptoPro CryptCP.
+
+It also provides GOST CMS EnvelopedData encryption, a local HTTP signing
+daemon and a native messaging host for the CryptoPro browser plug-in API.
+Access to a token requires pcscd from devel/pcsc-lite and a CCID driver
+(devel/libccid).

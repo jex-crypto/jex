@@ -1,0 +1,32 @@
+# Maintainer: Roman Yerin <r.yerin@640kb.co.uk>
+
+pkgname=jex-bin
+_pkgname=jex
+pkgver=0.13.0
+pkgrel=1
+pkgdesc='CryptoPro container reader and GOST CAdES/XAdES signing tool for Rutoken (prebuilt)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/jex-crypto/jex'
+license=('AGPL-3.0-or-later')
+depends=('pcsclite' 'gcc-libs' 'glibc')
+optdepends=(
+  'ccid: USB CCID driver for Rutoken and other smart card readers'
+  'libglvnd: OpenGL for the graphical PIN dialog of the browser host'
+  'libxkbcommon-x11: keyboard input for the graphical PIN dialog on X11'
+  'wayland: graphical PIN dialog on Wayland'
+)
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+options=('!strip' '!debug')
+source_x86_64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64-unknown-linux-gnu.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-aarch64-unknown-linux-gnu.tar.gz")
+# REPLACE with the values from SHA256SUMS of the release: updpkgsums
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  cd "$_pkgname-$pkgver-$CARCH-unknown-linux-gnu"
+  install -Dm755 jex -t "$pkgdir/usr/bin"
+  install -Dm644 README.md -t "$pkgdir/usr/share/doc/$_pkgname"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$_pkgname"
+}

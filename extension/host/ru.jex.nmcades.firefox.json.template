@@ -1,0 +1,7 @@
+{
+  "name": "ru.jex.nmcades",
+  "description": "Jex Native Messaging Host (Firefox)",
+  "path": "JEX_NMH_PATH_PLACEHOLDER",
+  "type": "stdio",
+  "allowed_extensions": ["jex@jex.local"]
+}

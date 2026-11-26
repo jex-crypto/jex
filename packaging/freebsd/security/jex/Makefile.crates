@@ -1,0 +1,6 @@
+# Placeholder. Regenerate after every version bump with
+#
+#   make makesum && make cargo-crates > Makefile.crates && make makesum
+#
+# The ports framework includes this file automatically; it must list every
+# crate from Cargo.lock as CARGO_CRATES= entries before the port can build.

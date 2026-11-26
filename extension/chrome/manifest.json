@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Jex CAdES",
+  "version": "0.1.4",
+  "description": "Jex Native Messaging bridge for CAdES / GOST (cadesplugin-compatible).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiepFN7mzBOu/Z52B3nUVgYmP8VGCaJSnu3dcnGiBWEYXFyi+KKqAWGJNaReZa+nzPfKROqCnTJqM7iMg7D0TkbyaMgRP3V5yjPTDtV5PlbnlI2vzXnus5gc8kOD3Sn0RPbM6aEz6fo/HNrp7LE/lFAG9UQeUC0/he3WypTDDJVp00F/zzp/ExEbBjtXd0YFCQFn1HCHH872WZVU8uiSsLbpQ0hNWxCsiSzGmfXVUC4LyFLX6xabxrfF+5WXm78UHAzZ3/67SXQA2VHGqfX2okJFHhsl8j4wwSCVpknblAXECBW0hWsUmVW+9iKs6u7DWfGRHbWlAFtoEk0PAPyqwQQIDAQAB",
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Jex"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "permissions": [
+    "nativeMessaging",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "file://*/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "nmcades_plugin_api.js",
+        "jex_api.js",
+        "page_hook.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

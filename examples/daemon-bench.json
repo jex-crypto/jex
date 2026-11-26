@@ -1,0 +1,18 @@
+{
+  "listen": "127.0.0.1:8787",
+  "tsa": "http://qs.cryptopro.ru/tsp/tsp.srf",
+  "tsa_timeout_secs": 20,
+  "keys": [
+    {
+      "id": "roman",
+      "container_dir": "./roman",
+      "pin_file": "./roman.pin"
+    }
+  ],
+  "api_keys": [
+    {
+      "token": "dev-token-change-me",
+      "allow": ["*"]
+    }
+  ]
+}

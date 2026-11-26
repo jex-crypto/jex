@@ -1,0 +1,90 @@
+[package]
+name = "jex"
+version = "0.13.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "CryptoPro classic-container reader and CAdES-BES/T/XLT1/A implementation"
+authors = ["Roman Yerin <r.yerin@640kb.co.uk>"]
+repository = "https://github.com/jex-crypto/jex"
+homepage = "https://github.com/jex-crypto/jex"
+readme = "README.md"
+keywords = ["gost", "cades", "xades", "cryptopro", "rutoken"]
+categories = ["command-line-utilities", "cryptography", "hardware-support"]
+# Highest `rust-version` declared by the locked dependency tree
+# (ratatui 0.30, time 0.3.4x, image 0.25, icu_* 2.x all require 1.88).
+rust-version = "1.88"
+# Keep the crate tarball free of local key material, signed artifacts,
+# personal-certificate fixtures and repository-only tooling.
+exclude = [
+    "/jex",
+    "/roman/",
+    "*.pin",
+    "daemon.token",
+    "*.sig",
+    "/extension/keys/",
+    "/testdata/xmldsig/jex_enveloped_roman.xml",
+    "/testdata/xmldsig/jex_xades_*.xml",
+    "/packaging/",
+    "/.github/",
+    "/target/",
+    ".DS_Store",
+]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+num-bigint = "0.4"
+num-traits = "0.2"
+pcsc = "2.9"
+streebog = "0.11"
+sha1 = "0.10"
+zeroize = "1"
+rand = "0.8"
+ureq = { version = "2.12", default-features = true }
+base64 = "0.22"
+dirs = "6.0.0"
+serde_json = "1.0.151"
+serde = { version = "1.0.229", features = ["derive"] }
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+tiny_http = "0.12"
+subtle = "2.6"
+quick-xml = "0.42"
+eframe = { version = "0.31", optional = true, default-features = true }
+sha2 = "0.10"
+rsa = { version = "0.9", features = ["sha2"] }
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8", "pem"] }
+
+[features]
+default = ["nmcades-ui"]
+nmcades-ui = ["dep:eframe"]
+
+[dev-dependencies]
+rcgen = "0.13"
+
+[package.metadata.deb]
+maintainer = "Roman Yerin <r.yerin@640kb.co.uk>"
+copyright = "Roman Yerin <r.yerin@640kb.co.uk>"
+license-file = ["LICENSE", "0"]
+section = "utils"
+priority = "optional"
+depends = "$auto, libpcsclite1"
+recommends = "pcscd"
+suggests = "libccid, libgl1, libxkbcommon-x11-0"
+extended-description = """\
+Jex reads CryptoPro classic key containers from Rutoken Lite smart cards \
+over PC/SC (or from containers saved on disk), unlocks GOST R 34.10-2012 \
+private keys and creates and verifies CMS/CAdES signatures \
+(BES, T, X Long Type 1 and A with renewal) as well as XML-DSig/XAdES \
+signatures, interoperable with CryptoPro CryptCP. It also provides CMS \
+EnvelopedData encryption, a local HTTP signing daemon and a native \
+messaging host for the CryptoPro browser plug-in API.\n\
+\n\
+A running PC/SC daemon (pcscd) and a CCID driver are required to talk to \
+the token. The optional graphical PIN dialog of the browser host needs \
+OpenGL and xkbcommon-x11 at run time."""
+assets = [
+    ["target/release/jex", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/jex/README.md", "644"],
+    ["LICENSE", "usr/share/doc/jex/LICENSE", "644"],
+]
