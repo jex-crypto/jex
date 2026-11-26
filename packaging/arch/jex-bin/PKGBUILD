@@ -20,8 +20,8 @@ conflicts=("$_pkgname")
 options=('!strip' '!debug')
 source_x86_64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64-unknown-linux-gnu.tar.gz")
 source_aarch64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-aarch64-unknown-linux-gnu.tar.gz")
-sha256sums_x86_64=('3b079539d035be50f60674c2ad4c260e56725a34cd3c1dd298ea5e870bfd38a1')
-sha256sums_aarch64=('5cfbe07c1ecb628ab63ab2530d463db473b9602c46d7ee673e1fc6763906f1f6')
+sha256sums_x86_64=('d9ca408a0411e2e2f75d088a6795aa89fc7c70e9b95e499fe8f71197d9d62d08')
+sha256sums_aarch64=('bd1a311168843f32ecf26d01a7c23245b792c898d48959bd70a050bfc014539b')
 
 package() {
   cd "$_pkgname-$pkgver-$CARCH-unknown-linux-gnu"

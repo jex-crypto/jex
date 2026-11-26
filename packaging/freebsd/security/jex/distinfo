@@ -1025,5 +1025,5 @@ SHA256 (rust/crates/zvariant_derive-4.2.0.crate) = 73e2ba546bda683a90652bac4a279
 SIZE (rust/crates/zvariant_derive-4.2.0.crate) = 11057
 SHA256 (rust/crates/zvariant_utils-2.1.0.crate) = c51bcff7cc3dbb5055396bcf774748c3dab426b4b8659046963523cee4808340
 SIZE (rust/crates/zvariant_utils-2.1.0.crate) = 7043
-SHA256 (jex-crypto-jex-v0.13.0_GH0.tar.gz) = 2feebb59466db9eaeb3cdfcb2b174db197f03cd566f1fa276ddf74891ea55257
-SIZE (jex-crypto-jex-v0.13.0_GH0.tar.gz) = 533855
+SHA256 (jex-crypto-jex-v0.13.1_GH0.tar.gz) = 49f142ddc98117fc818fd9c4e3c0161a1e42655d94f3d3a4f6ba1b594e0ccebc
+SIZE (jex-crypto-jex-v0.13.1_GH0.tar.gz) = 570314
