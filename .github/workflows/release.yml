@@ -32,10 +32,10 @@ jobs:
             os: ubuntu-22.04-arm
             deb: true
           - target: x86_64-apple-darwin
-            os: macos-14
+            os: macos-latest
             deb: false
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             deb: false
     steps:
       - uses: actions/checkout@v4
