@@ -56,7 +56,9 @@ git clone https://github.com/jex-crypto/jex
 cp -R jex/packaging/freebsd/security/jex /usr/ports/security/jex
 cd /usr/ports/security/jex && make install clean
 sysrc pcscd_enable=YES && service pcscd start
-``` The `GUI` port option (on by default) controls the graphical PIN dialog of the browser host.
+```
+
+The `GUI` port option (on by default) controls the graphical PIN dialog of the browser host.
 
 ### Prebuilt tarball
 
