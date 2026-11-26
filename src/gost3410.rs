@@ -6,7 +6,8 @@ use anyhow::{bail, Result};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::{rngs::OsRng, RngCore};
-use zeroize::Zeroizing;
+use streebog::{Digest, Streebog512};
+use zeroize::{Zeroize, Zeroizing};
 
 /// Sign an already-computed GOST R 34.11 digest.
 ///
@@ -25,9 +26,14 @@ pub fn sign_digest(curve: &Curve, private_le: &[u8], digest: &[u8]) -> Result<Ve
         e = BigUint::one();
     }
 
-    let mut rng = OsRng;
+    // Hedged nonce: RFC 6979 HMAC_DRBG seeded with d, e and fresh OS entropy
+    // (RFC 6979 §3.6 "additional data"). A weak or repeating RNG then degrades
+    // to deterministic RFC 6979 instead of reusing k across different digests.
+    let mut extra = Zeroizing::new([0u8; 32]);
+    OsRng.fill_bytes(extra.as_mut());
+    let mut nonces = NonceGen::new(&curve.q, &d, &e, extra.as_ref());
     loop {
-        let k = random_nonzero_below(&curve.q, curve.bytes, &mut rng);
+        let k = nonces.next();
         let c = curves::scalar_mul_generator(curve, &k)?;
         let r = &c.x % &curve.q;
         if r.is_zero() {
@@ -86,9 +92,95 @@ pub fn verify_digest(
     Ok((&c.x % &curve.q) == r)
 }
 
+/// RFC 6979 §3.2 HMAC_DRBG over HMAC-Streebog-512 (RFC 7836), with optional
+/// additional data mixed into the seed (§3.6).
+struct NonceGen<'a> {
+    q: &'a BigUint,
+    qlen: u64,
+    rlen: usize,
+    k: Zeroizing<[u8; 64]>,
+    v: Zeroizing<[u8; 64]>,
+}
+
+impl<'a> NonceGen<'a> {
+    fn new(q: &'a BigUint, d: &BigUint, e: &BigUint, extra: &[u8]) -> Self {
+        let qlen = q.bits();
+        let rlen = qlen.div_ceil(8) as usize;
+        let x = Zeroizing::new(be_fixed(d, rlen));
+        let h1 = be_fixed(&(e % q), rlen);
+        let mut g = NonceGen {
+            q,
+            qlen,
+            rlen,
+            k: Zeroizing::new([0u8; 64]),
+            v: Zeroizing::new([1u8; 64]),
+        };
+        for sep in [0u8, 1u8] {
+            let k = hmac_streebog512(
+                g.k.as_ref(),
+                &[g.v.as_ref(), &[sep], &x, &h1, extra],
+            );
+            *g.k = *k;
+            g.rehash_v();
+        }
+        g
+    }
+
+    fn rehash_v(&mut self) {
+        let v = hmac_streebog512(self.k.as_ref(), &[self.v.as_ref()]);
+        *self.v = *v;
+    }
+
+    /// Next candidate k in [1, q-1].
+    fn next(&mut self) -> BigUint {
+        loop {
+            // rlen <= 64, so one HMAC block always covers T.
+            self.rehash_v();
+            let k = BigUint::from_bytes_be(&self.v[..self.rlen])
+                >> (8 * self.rlen as u64 - self.qlen);
+            // Advance state before returning so a retry (r == 0, s == 0 or
+            // k out of range) never yields the same k again.
+            let nk = hmac_streebog512(self.k.as_ref(), &[self.v.as_ref(), &[0u8]]);
+            *self.k = *nk;
+            self.rehash_v();
+            if !k.is_zero() && &k < self.q {
+                return k;
+            }
+        }
+    }
+}
+
+/// HMAC_GOSTR3411_2012_512 (RFC 7836 §4.1.2) over the concatenation of `parts`.
+/// Keys are at most 64 bytes here, the Streebog block size.
+fn hmac_streebog512(key: &[u8], parts: &[&[u8]]) -> Zeroizing<[u8; 64]> {
+    debug_assert!(key.len() <= 64);
+    let mut pad = Zeroizing::new([0u8; 64]);
+    pad[..key.len()].copy_from_slice(key);
+    for b in pad.iter_mut() {
+        *b ^= 0x36;
+    }
+    let mut inner = Streebog512::new();
+    inner.update(pad.as_ref());
+    for p in parts {
+        inner.update(p);
+    }
+    let mut ih = inner.finalize();
+    for b in pad.iter_mut() {
+        *b ^= 0x36 ^ 0x5c;
+    }
+    let mut outer = Streebog512::new();
+    outer.update(pad.as_ref());
+    outer.update(&ih);
+    ih.as_mut_slice().zeroize();
+    let mut out = Zeroizing::new([0u8; 64]);
+    out.copy_from_slice(&outer.finalize());
+    out
+}
+
 fn random_nonzero_below(q: &BigUint, width: usize, rng: &mut impl RngCore) -> BigUint {
-    // Rejection sampling avoids modulo bias. q is close to 2^(8*width), so
-    // expected retries are small for TC26 curves.
+    // Rejection sampling avoids modulo bias. For curves where q is well below
+    // 2^(8*width) (e.g. TC26 256 paramSetA, q ~ 2^254) about 3 in 4 draws are
+    // rejected; still cheap.
     loop {
         let mut buf = Zeroizing::new(vec![0u8; width]);
         rng.fill_bytes(&mut buf);
@@ -114,4 +206,84 @@ fn be_fixed(v: &BigUint, n: usize) -> Vec<u8> {
     let mut out = vec![0u8; n - raw.len()];
     out.extend_from_slice(&raw);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn h(s: &str) -> Vec<u8> {
+        hex::decode(s).unwrap()
+    }
+
+    #[test]
+    fn hmac_streebog512_rfc7836_vector() {
+        let key: Vec<u8> = (0u8..32).collect();
+        let data = h("0126bdb87800af214341456563780100");
+        let mac = hmac_streebog512(&key, &[&data]);
+        assert_eq!(
+            hex::encode(mac.as_ref()),
+            "a59bab22ecae19c65fbde6e5f4e9f5d8549d31f037f9df9b905500e171923a77\
+             3d5f1530f2ed7e964cb2eedc29e9ad2f3afe93b2814f79f5000ffc0366c251e6"
+        );
+    }
+
+    fn curves_under_test() -> Vec<Curve> {
+        [
+            "1.2.643.7.1.2.1.1.1",
+            "1.2.643.7.1.2.1.1.2",
+            "1.2.643.7.1.2.1.1.3",
+            "1.2.643.7.1.2.1.1.4",
+            "1.2.643.7.1.2.1.2.1",
+            "1.2.643.7.1.2.1.2.2",
+            "1.2.643.7.1.2.1.2.3",
+        ]
+        .iter()
+        .filter_map(|oid| curves::by_oid(oid))
+        .collect()
+    }
+
+    #[test]
+    fn nonce_is_deterministic_in_inputs_and_in_range() {
+        for curve in curves_under_test() {
+            let d = BigUint::from(123456789u64);
+            let e1 = BigUint::from(1u8);
+            let e2 = BigUint::from(2u8);
+            let zero = [0u8; 32];
+            let a = NonceGen::new(&curve.q, &d, &e1, &zero).next();
+            let b = NonceGen::new(&curve.q, &d, &e1, &zero).next();
+            assert_eq!(a, b, "same inputs must give the same k");
+            assert!(!a.is_zero() && a < curve.q);
+            // A stuck RNG (same extra) must still give distinct k per digest.
+            let c = NonceGen::new(&curve.q, &d, &e2, &zero).next();
+            assert_ne!(a, c);
+            // Fresh entropy changes k for the same digest.
+            let other = [0x5au8; 32];
+            assert_ne!(a, NonceGen::new(&curve.q, &d, &e1, &other).next());
+            // Successive candidates differ (retry path).
+            let mut g = NonceGen::new(&curve.q, &d, &e1, &zero);
+            let k1 = g.next();
+            let k2 = g.next();
+            assert_ne!(k1, k2);
+            assert!(!k2.is_zero() && k2 < curve.q);
+        }
+    }
+
+    #[test]
+    fn sign_verify_all_curves() {
+        for curve in curves_under_test() {
+            let d = BigUint::from(987654321u64);
+            let p = curves::public_key(&curve, &d).unwrap();
+            let private = curves::le_fixed(&d, curve.bytes);
+            let x = curves::le_fixed(&p.x, curve.bytes);
+            let y = curves::le_fixed(&p.y, curve.bytes);
+            let digest = vec![0x42u8; curve.bytes];
+            let s1 = sign_digest(&curve, &private, &digest).unwrap();
+            let s2 = sign_digest(&curve, &private, &digest).unwrap();
+            assert!(verify_digest(&curve, &x, &y, &digest, &s1).unwrap());
+            assert!(verify_digest(&curve, &x, &y, &digest, &s2).unwrap());
+            // Hedged: fresh entropy makes repeated signatures differ.
+            assert_ne!(s1, s2);
+        }
+    }
 }
