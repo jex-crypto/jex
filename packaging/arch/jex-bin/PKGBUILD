@@ -20,9 +20,8 @@ conflicts=("$_pkgname")
 options=('!strip' '!debug')
 source_x86_64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64-unknown-linux-gnu.tar.gz")
 source_aarch64=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-aarch64-unknown-linux-gnu.tar.gz")
-# REPLACE with the values from SHA256SUMS of the release: updpkgsums
-sha256sums_x86_64=('SKIP')
-sha256sums_aarch64=('SKIP')
+sha256sums_x86_64=('3b079539d035be50f60674c2ad4c260e56725a34cd3c1dd298ea5e870bfd38a1')
+sha256sums_aarch64=('5cfbe07c1ecb628ab63ab2530d463db473b9602c46d7ee673e1fc6763906f1f6')
 
 package() {
   cd "$_pkgname-$pkgver-$CARCH-unknown-linux-gnu"

@@ -1,0 +1,87 @@
+name: Packages
+
+# Installs the published release artifacts and builds the distribution
+# packaging files from packaging/ the way each distribution would.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify, e.g. v0.13.0
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  deb:
+    name: .deb on ${{ matrix.image }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "ubuntu:22.04", arch: amd64, runner: ubuntu-latest }
+          - { image: "ubuntu:24.04", arch: amd64, runner: ubuntu-latest }
+          - { image: "debian:12", arch: amd64, runner: ubuntu-latest }
+          - { image: "ubuntu:24.04", arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install from the release
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq curl ca-certificates
+          ver="${TAG#v}"
+          curl -fsSLO "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/jex_${ver}-1_${{ matrix.arch }}.deb"
+          apt-get install -y ./jex_${ver}-1_${{ matrix.arch }}.deb
+          jex --version
+          jex --help >/dev/null
+
+  arch:
+    name: Arch Linux (${{ matrix.pkg }})
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [source, bin]
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: current
+      - name: Build and install with makepkg
+        run: |
+          pacman -Syu --noconfirm --needed base-devel namcap
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          dir=current/packaging/arch
+          [ "${{ matrix.pkg }}" = bin ] && dir=current/packaging/arch/jex-bin
+          cp -r "$dir" /home/builder/pkg
+          chown -R builder /home/builder/pkg
+          cd /home/builder/pkg
+          sudo -u builder namcap PKGBUILD || true
+          sudo -u builder makepkg -si --noconfirm
+          jex --version
+          sudo -u builder namcap ./*.pkg.tar.zst || true
+
+  freebsd:
+    name: FreeBSD port
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y git rust pcsc-lite pkgconf libxkbcommon
+          run: |
+            set -e
+            git clone --depth 1 https://git.freebsd.org/ports.git /usr/ports
+            cp -R packaging/freebsd/security/jex /usr/ports/security/jex
+            cd /usr/ports/security/jex
+            make BATCH=yes USE_PACKAGE_DEPENDS=yes checksum
+            make BATCH=yes USE_PACKAGE_DEPENDS=yes stage stage-qa check-plist
+            ./work/stage/usr/local/bin/jex --version
