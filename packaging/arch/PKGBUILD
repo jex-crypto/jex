@@ -1,7 +1,7 @@
 # Maintainer: Roman Yerin <r.yerin@640kb.co.uk>
 
 pkgname=jex
-pkgver=0.13.0
+pkgver=0.13.1
 pkgrel=1
 pkgdesc='CryptoPro container reader and GOST CAdES/XAdES signing tool for Rutoken'
 arch=('x86_64' 'aarch64')

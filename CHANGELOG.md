@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1
+
+- GOST R 34.10-2012 signing now derives the per-signature nonce `k` with RFC 6979 HMAC_DRBG over HMAC-Streebog-512 (RFC 7836), seeded with the private key, the digest and fresh OS entropy. A weak or repeating system RNG can no longer leak the private key through a reused `k`.
+
 ## 0.13.0
 
 - Consolidated the proven CryptoPro-compatible CAdES-X Long Type 1 construction into the default `cades enhance` path.

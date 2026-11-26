@@ -15,7 +15,7 @@ cd homebrew-jex
 mkdir -p Formula
 cp /path/to/jex/packaging/homebrew/jex.rb Formula/jex.rb
 # fill in sha256 (see below), then
-git add Formula/jex.rb && git commit -m "jex 0.13.0" && git push
+git add Formula/jex.rb && git commit -m "jex 0.13.1" && git push
 ```
 
 Users then install with:
